@@ -1,0 +1,9 @@
+Base,Label,In Base,Detectable By Mythril,Mythril_Recall,Mythril_Precision
+TestSet,Reentrancy,True,True,0.8518518518518519,0.2486486486486486
+TestSet,Access Control,True,True,0.8157894736842105,0.2287822878228782
+TestSet,Arithmetic,True,True,0.8222222222222222,0.2090395480225988
+TestSet,Unchecked Return Values,True,True,0.5775862068965517,0.8701298701298701
+TestSet,DoS,True,True,0.3157894736842105,0.16
+TestSet,Bad Randomness,True,True,0.25,0.0416666666666666
+TestSet,Front-Running,True,True,0.7352941176470589,0.1366120218579235
+TestSet,Time manipulation,True,True,0.8,0.2828282828282828
