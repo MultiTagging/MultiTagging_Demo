@@ -72,7 +72,7 @@ def electLabel(Base, Voters,Fair):
         #---------------------
         # Apply voting methods
         #---------------------
-        VoteResult = Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fair,commonAdrr,ApplyMethodOnle = True)
+        VoteResult = Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fair,commonAdrr,ApplyMethodOnle = False) # Set ApplyMethodOnly = True to use predefined rules read from ./Results/VoteResult/powerVoteRules.csv
         print('Power_based_vote is done')
         VoteResult = vote(VoteResult,'Majority')
         VoteResult = vote(VoteResult,'AtLeastOne')
