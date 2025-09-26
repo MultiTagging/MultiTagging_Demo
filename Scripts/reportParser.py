@@ -203,7 +203,10 @@ def parse(tool,reportsLocation,reportSource):
                         for filename in os.listdir(path):
                             codes = {}
                             analysis_time = ''
-                            fpath = path/filename
+                            fpath = Path(path)/filename
+
+                            if (not fpath.is_file()) or filename.startswith('.'):
+                                continue
 
                             if os.path.getsize(fpath) != 0:
                                 with open(fpath, errors="ignore") as file:
