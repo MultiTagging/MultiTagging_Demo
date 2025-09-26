@@ -1,7 +1,7 @@
 import pandas as pd
 from ast import literal_eval
 import numpy as np
-import os, json,ast
+import os, json,ast, re
 import math
 from Scripts.commonSamples import get_commonSamples
 from IPython.display import display
@@ -25,7 +25,9 @@ def electLabel(Base, Voters,Fair):
             commonAdrr['contractAddress'] =  get_commonSamples(Tools)
 
         for Tool in Tools:
-            ToolResult = pd.read_csv('./Results/LabeledData/' + Tool + '.csv',converters={Tool+'_DASP_Rank': literal_eval})
+            ToolResult = pd.read_csv('./Results/LabeledData/' + Tool + '.csv')
+            ToolResult[Tool+'_DASP_Rank'] = ToolResult[Tool+'_DASP_Rank'].apply(normalize_rank_cell)
+            
             if Fair:
                 #remove uncommon addr
                 ToolResult.drop(ToolResult[~ToolResult['contractAddress'].isin(commonAdrr['contractAddress'])].index, inplace=True) 
@@ -328,7 +330,8 @@ def get_toolsPerformance(Bases, Tools,DASP_Labels,Fair):
     #get the avg performance for each tool
     for base in Bases:
         for tool in Tools:
-            toolPerformance_on_base = pd.read_csv(resultsPath + '/' + base + '/' + tool + '.csv')#,converters={'Recall': literal_eval,'Precision': literal_eval,'F1-score': literal_eval})
+            toolPerformance_on_base = pd.read_csv(resultsPath + '/' + base + '/' + tool + '.csv', converters={"Recall": conv_num, "Precision": conv_num})
+
             for index, row in toolPerformance_on_base.iterrows():
                 v = toolPerformance_on_base.at[index,'Label']
 
@@ -389,6 +392,7 @@ def get_Tools_DASP_Result(Tools,dict_DASP_ToolsCapacity,Fair,commonAdrr):
             Tools_DASP_Result[Tool+'_'+str(i)] = ''
     for Tool in Tools:
         ToolResult = pd.read_csv('./Results/LabeledData/' + Tool + '.csv',converters={Tool+'_DASP_Rank': literal_eval})
+        ToolResult[Tool+'_DASP_Rank'] = ToolResult[Tool+'_DASP_Rank'].apply(normalize_rank_cell)      
         if Fair:
             ToolResult.drop(ToolResult[~ToolResult['contractAddress'].isin(commonAdrr['contractAddress'])].index, inplace=True) 
             ToolResult.reset_index(inplace=True, drop=True)
@@ -446,3 +450,50 @@ def parse_powerVoteData(value):
     return value
 
 #electLabel(['All'])
+
+def conv_num(x):
+    if pd.isna(x): return np.nan
+    s = re.sub(r'np\.float64\(([^)]+)\)', r'\1', str(x).strip())
+    try: return float(s)
+    except: return np.nan
+
+def normalize_rank_cell(v):
+    # explicit cases
+    if v is None:
+        return []
+    if isinstance(v, list):
+        vals = v
+    else:
+        s = str(v).strip()
+        if s in ('[]', '', 'safe', "['safe']"):
+            return []
+        if s in ('error', "['error']"):
+            return ['error']
+        # try a real python list first
+        try:
+            parsed = literal_eval(s)
+            vals = parsed if isinstance(parsed, list) else [parsed]
+        except Exception:
+            # handle np.int64(3), np.int32(5) cleanly
+            m = re.findall(r'np\.int(?:32|64)\((-?\d+)\)', s)
+            if m:
+                vals = [int(x) for x in m]
+            else:
+                # generic last resort
+                vals = [int(x) for x in re.findall(r'\b\d+\b', s)]
+    out = []
+    for x in vals:
+        try:
+            i = int(x)
+            if 1 <= i <= 10:   # clamp to valid DASP ranks
+                out.append(i)
+        except Exception:
+            pass
+    return sorted(set(out))
+
+def _to_float(x):
+    try:
+        # converts np.float64 -> Python float; leaves NaN as float('nan')
+        return float(x)
+    except Exception:
+        return float('nan')
