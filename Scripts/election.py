@@ -6,7 +6,7 @@ import math
 from Scripts.commonSamples import get_commonSamples
 from IPython.display import display
 
-def electLabel(Base, Voters,Fair):
+def electLabel(Base, Voters,Fair, ApplyMethodOnle=True): # Set ApplyMethodOnly = True to use predefined rules read from ./Results/VoteResult/powerVoteRules.csv
     try:
         DASP_ToolsCapacity = pd.read_excel('./Mapping/ToolsCapacity.xlsx',sheet_name='DASP')
         dict_DASP_ToolsCapacity = DASP_ToolsCapacity.to_dict('records')
@@ -74,7 +74,7 @@ def electLabel(Base, Voters,Fair):
         #---------------------
         # Apply voting methods
         #---------------------
-        VoteResult = Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fair,commonAdrr,ApplyMethodOnle = False) # Set ApplyMethodOnly = True to use predefined rules read from ./Results/VoteResult/powerVoteRules.csv
+        VoteResult = Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fair,commonAdrr, ApplyMethodOnle)
         print('Power_based_vote is done')
         VoteResult = vote(VoteResult,'Majority')
         VoteResult = vote(VoteResult,'AtLeastOne')
