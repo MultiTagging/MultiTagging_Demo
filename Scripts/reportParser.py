@@ -203,10 +203,7 @@ def parse(tool,reportsLocation,reportSource):
                         for filename in os.listdir(path):
                             codes = {}
                             analysis_time = ''
-                            fpath = Path(path)/filename
-
-                            if (not fpath.is_file()) or filename.startswith('.'):
-                                continue
+                            fpath = path/filename
 
                             if os.path.getsize(fpath) != 0:
                                 with open(fpath, errors="ignore") as file:
@@ -246,6 +243,135 @@ def parse(tool,reportsLocation,reportSource):
                         return toolTags
                     except IOError:
                         print("Path not exist")
+                case 'MAIAN':
+                    try:
+                        NEG_PATTERNS = [re.compile(r'^\s*Not destructible', re.I),
+                                        re.compile(r'^\s*No Ether leak', re.I),
+                                        re.compile(r'^\s*No Ether lock', re.I),]
+
+                        def is_negative(msg: str) -> bool:
+                            return any(p.search(msg or '') for p in NEG_PATTERNS)
+
+                        def map_maian_label(msg: str) -> str | None:
+                            m = (msg or "").lower()
+                            # true positives
+                            if 'suicid' in m or 'self-destruct' in m or 'selfdestruct' in m:
+                                return 'suicidal'              
+                            if 'leak' in m or 'arbitrary send' in m:
+                                return 'arbitrary-send-eth'    
+                            if 'lock' in m or 'unwithdrawable' in m or 'greedy' in m:
+                                return 'ether-lock'            
+                            return None
+
+                        for filename in os.listdir(path):
+                            if not filename.endswith('.json'):
+                                continue
+
+                            fpath = path / filename
+                            codes = {}
+
+                            if fpath.is_file() and os.path.getsize(fpath) != 0:
+                                try:
+                                    with open(fpath, encoding="utf-8", errors="ignore") as fh:
+                                        data = json.load(fh)
+                                except Exception:
+                                    codes = {'error': {"lines": [], "SWC": [], "DASP": []}}
+                                    toolTags.loc[len(toolTags)] = [filename.rstrip().rsplit('.')[0], codes]
+                                    continue
+
+                                findings = data.get('findings', []) or []
+
+                                if (not findings) and (data.get('errors') or data.get('fails')):
+                                    codes = {'error': {"lines": [], "SWC": [], "DASP": []}}
+                                else:
+                                    for f in findings:
+                                        if not isinstance(f, dict):
+                                            continue
+                                        msg   = f.get('name', '') or ''
+                                        if is_negative(msg):
+                                            # skip "No …" / "Not …" statements (they are safety assertions)
+                                            continue
+
+                                        label = map_maian_label(msg)
+                                        if not label:
+                                            continue
+
+                                        entry = codes.setdefault(label, {"lines": [], "SWC": [], "DASP": []})
+                                        ensure(entry)
+
+                                        append_str(entry["files"],     f.get('filename'))
+                                        append_str(entry["contracts"], f.get('contract'))
+                                        append_str(entry["messages"],  msg)
+
+                                    # dedupe per-entry
+                                    for entry in codes.values():
+                                        dedupe(entry)
+
+                            else:
+                                codes = {'error': {"lines": [], "SWC": [], "DASP": []}}
+
+                            toolTags.loc[len(toolTags)] = {'contractAddress': filename.rstrip().rsplit('.')[0],
+                                                           tool + '_Labels': codes}
+
+                        print(tool + " tags have been extracted successfully")
+                        return toolTags
+                    except IOError:
+                        print("Path not exist")
+                case 'Semgrep':
+                    try:
+                        for filename in os.listdir(path):
+                            if not filename.endswith('.json'):
+                                continue
+
+                            fpath = path / filename
+                            codes = {}
+
+                            if fpath.is_file() and os.path.getsize(fpath) != 0:
+                                try:
+                                    with open(fpath, encoding="utf-8", errors="ignore") as fh:
+                                        data = json.load(fh)
+                                except Exception:
+                                    codes = {'error': {"lines": [], "SWC": [], "DASP": []}}
+                                    toolTags.loc[len(toolTags)] = {
+                                        'contractAddress': Path(filename).stem,
+                                        tool + '_Labels': codes
+                                    }
+                                    continue
+
+                                findings = data.get('findings', []) or []
+                                errors   = data.get('errors', []) or []
+                                fails    = data.get('fails',  []) or []
+
+                                if (not findings) and (errors or fails):
+                                    codes = {'error': {"lines": [], "SWC": [], "DASP": []}}
+                                else:
+                                    for f in findings:
+                                        if not isinstance(f, dict):
+                                            continue
+                                        label = f.get('name') or 'semgrep-rule'
+                                        entry = codes.setdefault(label, {"lines": [], "SWC": [], "DASP": []}); ensure(entry)
+
+                                        append_str(entry["files"], f.get('filename'))
+                                        append_int(entry["lines"], f.get('line'))
+                                        append_int(entry["end_lines"], f.get('line'))  
+                                        append_str(entry["severities"], f.get('category'))
+                                        append_str(entry["messages"],  f.get('message'))
+
+                                    for entry in codes.values():
+                                        dedupe(entry)
+                            else:
+                                codes = {'error': {"lines": [], "SWC": [], "DASP": []}}
+
+                            key = Path(filename).stem
+                            if key.endswith('.sol'):
+                                key = key[:-4]
+                            toolTags.loc[len(toolTags)] = {'contractAddress': key,tool + '_Labels': codes}
+
+                        print(tool + " tags have been extracted successfully")
+                        return toolTags
+                    except IOError:
+                        print("Path not exist")
+
         case 1:
             try:
                 reportsDF = pd.DataFrame()
