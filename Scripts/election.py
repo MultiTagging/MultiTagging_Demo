@@ -209,7 +209,9 @@ def get_votingMethod(toolsPerformanceDic,toolsRules):
         HighPerformTools = []
         Voters = []
         Inverter = {}
+
         for tool in toolsPerformanceDic[label].keys():
+
             if toolsRules[label][tool] != 'None':
                 if toolsRules[label][tool] == 'Voter':
                     Voters.append(tool)

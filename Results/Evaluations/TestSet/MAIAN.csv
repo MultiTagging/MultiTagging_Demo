@@ -1,0 +1,9 @@
+Base,Label,In Base,Detectable By Tool,Base Size,Positive No,Coverage,TP,TN,FP,FN,Recall,Precision
+TestSet.csv,Reentrancy,True,False,1084,135,0.0,0,949,0,135,0.0,
+TestSet.csv,Access Control,True,True,1084,97,15.463917525773196,15,951,36,82,0.15463917525773196,0.29411764705882354
+TestSet.csv,Arithmetic,True,False,1084,66,0.0,0,1018,0,66,0.0,
+TestSet.csv,Unchecked Return Values,True,False,1084,168,0.0,0,916,0,168,0.0,
+TestSet.csv,DoS,True,True,1084,46,2.1739130434782608,1,1005,33,45,0.021739130434782608,0.029411764705882353
+TestSet.csv,Bad Randomness,True,False,1084,6,0.0,0,1078,0,6,0.0,
+TestSet.csv,Front-Running,True,False,1084,45,0.0,0,1039,0,45,0.0,
+TestSet.csv,Time manipulation,True,False,1084,54,0.0,0,1030,0,54,0.0,

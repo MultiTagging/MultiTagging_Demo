@@ -1,0 +1,5 @@
+Method,Reentrancy,Access Control,Arithmetic,Unchecked Return Values,DoS,Bad Randomness,Front-Running,Time manipulation,Short Address Attack,Unknown Unknowns
+Voters,"['Mythril', 'Slither', 'Solhint']","['MAIAN', 'Mythril', 'Semgrep', 'Slither', 'Solhint', 'VeriSmart']","['Mythril', 'Slither', 'VeriSmart']","['Mythril', 'Slither', 'Solhint']","['Mythril', 'Slither', 'Solhint']","['Mythril', 'Slither', 'Solhint']",['Mythril'],"['Mythril', 'Slither', 'Solhint']",[],[]
+Inverter,{'Slither': 'Semgrep'},{},{},{},{'Slither': 'MAIAN'},"{'Slither': 'Semgrep', 'Solhint': 'Semgrep'}",{},{},{},{}
+AtLeastOne,"['Mythril', 'Slither', 'Solhint']","['MAIAN', 'Mythril', 'Semgrep', 'Slither', 'Solhint', 'VeriSmart']","['Mythril', 'Slither', 'VeriSmart']","['Mythril', 'Slither', 'Solhint']","['Mythril', 'Slither', 'Solhint']","['Mythril', 'Slither', 'Solhint']",['Mythril'],[],[],[]
+Majority,[],[],[],[],[],[],[],"['Mythril', 'Slither', 'Solhint']",[],[]

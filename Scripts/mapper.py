@@ -22,9 +22,7 @@ def map(labeledSC,VulnerablityMapFilePath,tool):
             SWC_Titles= []
             DASP_Ranks = []
             DASP_Titles = []
-
-            labels_val = row.get(tool+'_Labels', {})
-            if isinstance(labels_val, dict) and len(labels_val) == 1 and 'error' in labels_val:
+            if len(row[tool+'_Labels']) == 1 and 'error' in row[tool+'_Labels']:
                 SWC_Codes.append('error')
                 SWC_Titles.append('error')
                 DASP_Ranks.append('error')

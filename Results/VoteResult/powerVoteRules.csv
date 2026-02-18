@@ -1,0 +1,7 @@
+Tool,Reentrancy,Access Control,Arithmetic,Unchecked Return Values,DoS,Bad Randomness,Front-Running,Time manipulation,Short Address Attack,Unknown Unknowns
+MAIAN,None,Voter,None,None,{'Slither': 'MAIAN'},None,None,None,None,None
+Mythril,Voter,Voter,Voter,Voter,Voter,Voter,Voter,Voter,None,None
+Semgrep,{'Slither': 'Semgrep'},Voter,None,None,None,"{'Slither': 'Semgrep', 'Solhint': 'Semgrep'}",None,None,None,None
+Slither,Voter,Voter,Voter,Voter,Voter,Voter,None,Voter,None,None
+Solhint,Voter,Voter,None,Voter,Voter,Voter,None,Voter,None,None
+VeriSmart,None,Voter,Voter,None,None,None,None,None,None,None
