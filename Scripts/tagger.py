@@ -24,12 +24,12 @@ def generateTags(tool,reportSource):
         vulnReportsPath = config_File['Reports_Directory_Path'][Tools.index(tool)]['Path']
         labeledSC = parse(tool,vulnReportsPath,reportSource)
 
-        if reportSource ==0 and tool != 'VeriSmart':
+        if reportSource ==0 and tool not in ['VeriSmart', 'MAIAN', 'Semgrep']:
             analysisTimeReportsPath = config_File['AnalysisTime_Directory_Path'][Tools.index(tool)]['Path']    
             tool_LabeledDS = pd.DataFrame(get_ToolAnalysisTime(tool, analysisTimeReportsPath))
             labeledSC= labeledSC.merge(tool_LabeledDS,on='contractAddress')
         
-        VulnerablityMapFilePath = config_File['VulnerablityMap_File_Path'][0]['Path']  
+        VulnerablityMapFilePath = config_File['VulnerablityMap_File_Path'][0]['Path'] 
         mapLabeledSC = map(labeledSC,VulnerablityMapFilePath,tool)
 
         mapLabeledSC.to_csv('./Results/LabeledData/'+tool+'.csv',index=False)

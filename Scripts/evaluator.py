@@ -1,7 +1,8 @@
 import pandas as pd
 from ast import literal_eval
+import numpy as np
 from pathlib import Path
-import json
+import json, os, re
 from Scripts.commonSamples import get_commonSamples
 #-------------------------------------------
 #Get the correct path to the configuration file
@@ -21,9 +22,11 @@ def eval(tool,base,Fair):
         if 'vote' in tool.lower():
             vote = True
             if Fair:
-                ToolDS = pd.read_csv('./Results/LabeledData/voteBasedData_Fair.csv',converters={'DASP': literal_eval})
+                ToolDS = pd.read_csv('./Results/LabeledData/voteBasedData_Fair.csv')
+                ToolDS['DASP'] = ToolDS['DASP'].apply(normalize_rank_cell)
             else:
-                ToolDS = pd.read_csv('./Results/LabeledData/voteBasedData.csv',converters={'DASP': literal_eval})
+                ToolDS = pd.read_csv('./Results/LabeledData/voteBasedData.csv')
+                ToolDS['DASP'] = ToolDS['DASP'].apply(normalize_rank_cell)
             voteMethod = '_' + tool.rsplit('_')[1]
 
             DASP_unique_Ranks_tool = detectable_vulnerabilities(ToolDS,True,vote)
@@ -32,10 +35,11 @@ def eval(tool,base,Fair):
         else:
             DASP_unique_Ranks_tool = detectable_vulnerabilities(tool,False,vote)
             print(tool, 'designed to detect', len(DASP_unique_Ranks_tool), 'vulnerabilities from DASP Top 10, which are:\n', DASP_unique_Ranks_tool)
-            ToolDS = pd.read_csv('./Results/LabeledData/'+tool+'.csv',converters={tool+'_DASP_Rank': literal_eval})
-            
-        BaseDS = pd.read_csv(BaseDS_Dir + base,converters={'DASP': literal_eval})
-
+            ToolDS = pd.read_csv('./Results/LabeledData/'+tool+'.csv')
+            ToolDS[tool+'_DASP_Rank'] = ToolDS[tool+'_DASP_Rank'].apply(normalize_rank_cell)
+        BaseDS = pd.read_csv(BaseDS_Dir + base)
+        BaseDS['DASP'] = BaseDS['DASP'].apply(normalize_rank_cell)
+        
         if vote:
             predicted = createDASPmetrics(tool,ToolDS,voteMethod)
         else:
@@ -59,7 +63,7 @@ def eval(tool,base,Fair):
             else:
                 actual.drop(actual[~actual['id'].isin(predicted['id'])].index, inplace=True)    
                 actual.reset_index(inplace=True, drop=True)
-        
+      
         metricsDF = compute_confusion_matrix(actual, predicted,DASP_unique_Ranks_Base)
         metricsDF.insert(0, 'Base',base,True)
         metricsDF = add_detectable_Base_Columns(metricsDF,DASP_unique_Ranks_tool,DASP_unique_Ranks_Base)
@@ -69,22 +73,30 @@ def eval(tool,base,Fair):
             set_avgAnalysisTimeAndFailureRate(predicted,BaseDS,base.split('.')[0],tool,Fair)
         #-------------------------------------------
         if Fair:
-            if vote:
-                metricsDF.to_csv('./Results/Evaluations_Fair/'+base.split('.')[0]+'/'+ tool +'.csv',index=False) #toBemove to other dir
-                predicted.to_csv('./Results/DASP_Data_Fair/'+base.split('.')[0]+'/predicted_'+tool +'.csv',index=False) #toBemove to other dir
-            else:
-                metricsDF.to_csv('./Results/Evaluations_Fair/'+base.split('.')[0]+'/' + tool + '.csv',index=False)
-                predicted.to_csv('./Results/DASP_Data_Fair/'+base.split('.')[0]+'/predicted_'+tool+'.csv',index=False)
-            actual.to_csv('./Results/DASP_Data_Fair/'+base.split('.')[0]+'/actual.csv',index=False)
+            EvaluationsOutDir = './Results/Evaluations_Fair/'
+            DASP_DataOutDir = './Results/DASP_Data_Fair/'
         else:
-            if vote:
-                metricsDF.to_csv('./Results/Evaluations/'+base.split('.')[0]+'/'+tool +'.csv',index=False) #toBemove to other dir
-                predicted.to_csv('./Results/DASP_Data/'+base.split('.')[0]+'/predicted_'+tool +'.csv',index=False) #toBemove to other dir
-            else:
-                metricsDF.to_csv('./Results/Evaluations/'+base.split('.')[0]+'/'+tool+'.csv',index=False)
-                predicted.to_csv('./Results/DASP_Data/'+base.split('.')[0]+'/predicted_'+tool+'.csv',index=False)
-            actual.to_csv('./Results/DASP_Data/'+base.split('.')[0]+'/actual.csv',index=False)
+            EvaluationsOutDir = './Results/Evaluations/'
+            DASP_DataOutDir = './Results/DASP_Data/'
 
+        #Create Base dir if not exit
+        BaseName = base.split('.')[0]
+        if not BaseName in [f.name for f in os.scandir(EvaluationsOutDir) if f.is_dir()]:
+            path = os.path.join(EvaluationsOutDir, BaseName)
+            os.mkdir(path)
+        if not BaseName in [f.name for f in os.scandir(DASP_DataOutDir) if f.is_dir()]:
+            path = os.path.join(DASP_DataOutDir, BaseName)
+            os.mkdir(path)  
+        #Save output
+        print(EvaluationsOutDir + BaseName +'/'+ tool +'.csv')
+        print(DASP_DataOutDir + BaseName +'/predicted_'+tool +'.csv')
+        if vote:
+            metricsDF.to_csv(EvaluationsOutDir + BaseName +'/'+ tool +'.csv',index=False) #toBeMoved to other dir
+            predicted.to_csv(DASP_DataOutDir + BaseName +'/predicted_'+tool +'.csv',index=False) #toBeMoved to other dir
+        else:
+            metricsDF.to_csv(EvaluationsOutDir + BaseName + '/' + tool + '.csv',index=False)
+            predicted.to_csv(DASP_DataOutDir + BaseName + '/predicted_' + tool + '.csv',index=False)
+        actual.to_csv(DASP_DataOutDir + BaseName + '/actual.csv',index=False)
         return metricsDF
     except Exception as err:
         print(f"Unexpected {err=}, {type(err)=}")
@@ -140,7 +152,7 @@ def createDASPmetrics(tool,DS,method):
                 DASPmetrics.at[index,'DASP'] = DS[DASP_Label].iloc[index]
                 if tool !='Base':
                     DASPmetrics.at[index,'AnalysisTime'] = DS[tool+'_AnalysisTime'].iloc[index]
-                if DS.at[index,DASP_Label] == 'safe':
+                if DS.at[index,DASP_Label] == ['safe']:
                     for i in range(1,11):
                         DASPmetrics.at[index, str(i)] = 0
                 else:
@@ -229,4 +241,34 @@ def set_avgAnalysisTimeAndFailureRate(predicted,BaseDS,base,tool,Fair):
     else:
         avgAnalysisTimeAndFailureRateDF.to_csv('./Results/Performance/avgAnalysisTimeAndFailureRate.csv',index=False)
 
-#eval('vote_avg','eThor.csv')
+def normalize_rank_cell(v):
+    # preserve explicit error/empty
+    if isinstance(v, list):
+        if v == ['error']:
+            return ['error']
+        out = []
+        for x in v:
+            try:
+                out.append(int(x))  # handles numpy ints too
+            except Exception:
+                # fall back: extract digits from a string like "np.int64(3)"
+                m = re.findall(r'-?\d+', str(x))
+                out.extend(int(n) for n in m)
+        return sorted(set(out))
+    if v is None:
+        return []
+    s = str(v).strip()
+    if s in ('[]', ''):
+        return []
+    if s in ("['error']", 'error'):
+        return ['error']
+    # try to parse normal python lists like "[1, 2]"
+    if s.startswith('[') and s.endswith(']'):
+        try:
+            parsed = literal_eval(s)
+            return normalize_rank_cell(parsed)
+        except Exception:
+            pass
+    # last resort: pull integers out of arbitrary strings (e.g., "[np.int64(3), np.int64(2)]")
+    nums = re.findall(r'-?\d+', s)
+    return sorted(set(int(n) for n in nums))

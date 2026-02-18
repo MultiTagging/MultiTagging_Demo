@@ -1,11 +1,12 @@
 import pandas as pd
 from ast import literal_eval
 import numpy as np
-import os
+import os, json,ast, re
 import math
 from Scripts.commonSamples import get_commonSamples
+from IPython.display import display
 
-def electLabel(Base, Voters,Fair):
+def electLabel(Base, Voters,Fair, ApplyMethodOnle=True): # Set ApplyMethodOnly = True to use predefined rules read from ./Results/VoteResult/powerVoteRules.csv
     try:
         DASP_ToolsCapacity = pd.read_excel('./Mapping/ToolsCapacity.xlsx',sheet_name='DASP')
         dict_DASP_ToolsCapacity = DASP_ToolsCapacity.to_dict('records')
@@ -24,8 +25,9 @@ def electLabel(Base, Voters,Fair):
             commonAdrr['contractAddress'] =  get_commonSamples(Tools)
 
         for Tool in Tools:
-            ToolResult = pd.read_csv('./Results/LabeledData/' + Tool + '.csv',converters={Tool+'_DASP_Rank': literal_eval})
-
+            ToolResult = pd.read_csv('./Results/LabeledData/' + Tool + '.csv')
+            ToolResult[Tool+'_DASP_Rank'] = ToolResult[Tool+'_DASP_Rank'].apply(normalize_rank_cell)
+            
             if Fair:
                 #remove uncommon addr
                 ToolResult.drop(ToolResult[~ToolResult['contractAddress'].isin(commonAdrr['contractAddress'])].index, inplace=True) 
@@ -72,7 +74,7 @@ def electLabel(Base, Voters,Fair):
         #---------------------
         # Apply voting methods
         #---------------------
-        VoteResult = Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fair,commonAdrr)
+        VoteResult = Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fair,commonAdrr, ApplyMethodOnle)
         print('Power_based_vote is done')
         VoteResult = vote(VoteResult,'Majority')
         VoteResult = vote(VoteResult,'AtLeastOne')
@@ -109,24 +111,48 @@ def vote_methods(labelVots,method):
             label = 1 if labelVots.count(1) >= 1 else 0
     return label
 
-def Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fair,commonAdrr):
+def Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fair,commonAdrr,ApplyMethodOnle = False):
     
     #[1]Identify tool sensitivity rate [High | Low]
     #----------------------------------------------
-    toolsPerformanceDic = get_toolsPerformance(Base, Tools,DASP_Labels,Fair)
-    print('toolsPerformanceDic:\n',toolsPerformanceDic)
+    if not ApplyMethodOnle:
+        toolsPerformanceDic = get_toolsPerformance(Base, Tools,DASP_Labels,Fair)
+        print('toolsPerformanceDic:\n')
+        display(toolsPerformanceDic)
 
     #[2]Identify tool role [Voter | Inverter | None]
     #------------------------------------------------------
-    toolsOVerlapDegree = get_toolsOVerlapDegree(DASP_Labels,Tools,Fair)
-    print('toolsOVerlapDegree:\n',toolsOVerlapDegree)
-    toolsRules = get_toolRole(toolsPerformanceDic,toolsOVerlapDegree)
-    print('toolsRule:\n',toolsRules)
+    if ApplyMethodOnle:
+        toolsRules = pd.read_csv('./Results/VoteResult/powerVoteRules.csv')
+        for col in toolsRules.columns:
+            toolsRules[col] = toolsRules[col].apply(parse_powerVoteData)
+    else:
+        toolsOVerlapDegree = get_toolsOVerlapDegree(DASP_Labels,Tools,Fair)
+        print('toolsOVerlapDegree:\n',toolsOVerlapDegree)
+        toolsRules = get_toolRole(toolsPerformanceDic,toolsOVerlapDegree)
+    print('toolsRule:\n')
+    display(toolsRules)
 
     #[3]Identify voting method for each vulnerability
     #------------------------------------------------
-    votingMethod = get_votingMethod(toolsPerformanceDic,toolsRules)
-    print('votingMethod:\n',votingMethod)
+    if ApplyMethodOnle:
+        votingMethoddata = pd.read_csv('./Results/VoteResult/votingMethod.csv')
+        for col in votingMethoddata.columns:
+            votingMethoddata[col] = votingMethoddata[col].apply(parse_powerVoteData)
+        
+        votingMethod = {}
+        for label in votingMethoddata.columns[1:]:  # Skip the first column, which contains the method types
+            votingMethod[label] = {
+                'Voters': votingMethoddata.loc[votingMethoddata['Method'] == 'Voters', label].values[0],
+                'Inverter': votingMethoddata.loc[votingMethoddata['Method'] == 'Inverter', label].values[0],
+                'AtLeastOne': votingMethoddata.loc[votingMethoddata['Method'] == 'AtLeastOne', label].values[0],
+                'Majority': votingMethoddata.loc[votingMethoddata['Method'] == 'Majority', label].values[0],
+            }
+
+    else:
+        votingMethod = get_votingMethod(toolsPerformanceDic,toolsRules)
+    print('votingMethod:\n')
+    display(votingMethod)
     #[4]Invert positive flags for overlapping samples of other tools
     #---------------------------------------------------------------
     #[5]Apply vote
@@ -141,6 +167,10 @@ def Power_based_vote(VoteData,Base, Tools,dict_DASP_ToolsCapacity,DASP_Labels,Fa
             label = DASP_Labels[i-1]
 
             votingRules = votingMethod[label]
+            print(label)
+            print(votingRules)
+            print('AtLeastOne:',votingRules['Majority'])
+            print('Majority:',votingRules['AtLeastOne'])
             
             if len(votingRules['Majority']) == len(votingRules['AtLeastOne']) == 0:
                 continue
@@ -285,6 +315,8 @@ def get_toolsPerformance(Bases, Tools,DASP_Labels,Fair):
 
     if Bases[0].lower() == 'all':
         Bases = sorted([d.name for d in os.scandir(resultsPath) if d.is_dir and not d.name.startswith('.')])
+    else:
+        Bases = [Bases]
 
     #create output DF (toolsPerformanceDF)
     Metrics = ['Recall','Precision']
@@ -300,19 +332,18 @@ def get_toolsPerformance(Bases, Tools,DASP_Labels,Fair):
     #get the avg performance for each tool
     for base in Bases:
         for tool in Tools:
-            toolPerformance_on_base = pd.read_csv(resultsPath + '/' + base + '/' + tool + '.csv')#,converters={'Recall': literal_eval,'Precision': literal_eval,'F1-score': literal_eval})
+            toolPerformance_on_base = pd.read_csv(resultsPath + '/' + base + '/' + tool + '.csv', converters={"Recall": conv_num, "Precision": conv_num})
 
             for index, row in toolPerformance_on_base.iterrows():
                 v = toolPerformance_on_base.at[index,'Label']
 
                 toolsPerformanceDic[v][tool]['Recall'].append(toolPerformance_on_base.at[index,'Recall'])
                 toolsPerformanceDic[v][tool]['Precision'].append(toolPerformance_on_base.at[index,'Precision'])
-
     if len(Bases) >0:
         for v in toolsPerformanceDic.keys():
             for tool in toolsPerformanceDic[v].keys():
                 toolsPerformanceDic[v][tool]['Recall'] = np.average(toolsPerformanceDic[v][tool]['Recall'])
-                toolsPerformanceDic[v][tool]['Precision'] = np.average(toolsPerformanceDic[v][tool]['Precision'])               
+                toolsPerformanceDic[v][tool]['Precision'] = np.average(toolsPerformanceDic[v][tool]['Precision'])            
     return toolsPerformanceDic
 
 def add_voteColumns(VoteData,method):
@@ -363,6 +394,7 @@ def get_Tools_DASP_Result(Tools,dict_DASP_ToolsCapacity,Fair,commonAdrr):
             Tools_DASP_Result[Tool+'_'+str(i)] = ''
     for Tool in Tools:
         ToolResult = pd.read_csv('./Results/LabeledData/' + Tool + '.csv',converters={Tool+'_DASP_Rank': literal_eval})
+        ToolResult[Tool+'_DASP_Rank'] = ToolResult[Tool+'_DASP_Rank'].apply(normalize_rank_cell)      
         if Fair:
             ToolResult.drop(ToolResult[~ToolResult['contractAddress'].isin(commonAdrr['contractAddress'])].index, inplace=True) 
             ToolResult.reset_index(inplace=True, drop=True)
@@ -403,5 +435,67 @@ def get_Tools_DASP_Result(Tools,dict_DASP_ToolsCapacity,Fair,commonAdrr):
         Tools_DASP_Result.to_csv('./Results/LabeledData/AllToolsData.csv',index=False)
    
     return Tools_DASP_Result
+#--------------------------------------------------------------------
+def parse_powerVoteData(value):
+
+    if isinstance(value, str):
+        value = value.strip()
+        try:
+            # Attempt to parse as JSON or Python literal
+            return json.loads(value)
+        except json.JSONDecodeError:
+            try:
+                return ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                # Return original string if it cannot be parsed
+                return value
+    return value
 
 #electLabel(['All'])
+
+def conv_num(x):
+    if pd.isna(x): return np.nan
+    s = re.sub(r'np\.float64\(([^)]+)\)', r'\1', str(x).strip())
+    try: return float(s)
+    except: return np.nan
+
+def normalize_rank_cell(v):
+    # explicit cases
+    if v is None:
+        return []
+    if isinstance(v, list):
+        vals = v
+    else:
+        s = str(v).strip()
+        if s in ('[]', '', 'safe', "['safe']"):
+            return []
+        if s in ('error', "['error']"):
+            return ['error']
+        # try a real python list first
+        try:
+            parsed = literal_eval(s)
+            vals = parsed if isinstance(parsed, list) else [parsed]
+        except Exception:
+            # handle np.int64(3), np.int32(5) cleanly
+            m = re.findall(r'np\.int(?:32|64)\((-?\d+)\)', s)
+            if m:
+                vals = [int(x) for x in m]
+            else:
+                # generic last resort
+                vals = [int(x) for x in re.findall(r'\b\d+\b', s)]
+    out = []
+    for x in vals:
+        try:
+            i = int(x)
+            if 1 <= i <= 10:   # clamp to valid DASP ranks
+                out.append(i)
+        except Exception:
+            pass
+    return sorted(set(out))
+
+def _to_float(x):
+    try:
+        # converts np.float64 -> Python float; leaves NaN as float('nan')
+        return float(x)
+    except Exception:
+        return float('nan')
